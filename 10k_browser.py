@@ -1,10 +1,14 @@
 import os
 import pandas as pd
 import streamlit as st
+import requests  # Added import for sending POST requests
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from docx import Document
 
 st.set_page_config(layout="wide")
+
+# Define your n8n webhook URL here (replace with your actual URL)
+webhook_url = "http://localhost:5678/webhook-test/prospect-10k"
 
 # Custom styling 
 st.markdown("""
@@ -73,24 +77,20 @@ if service_df is not None:
     if "selected_service" not in st.session_state:
         st.session_state.selected_service = None
     
-    # Wrap service selection buttons in a dedicated container for custom styling
     st.markdown("<div id='service-selection'>", unsafe_allow_html=True)
-    
-    # Create a single row of columns for all service options
     cols = st.columns(len(service_options))
-    
-    # Use Streamlit's native buttons
     for i, service in enumerate(service_options):
         with cols[i]:
             if st.button(service, key=f"service_{i}", use_container_width=True):
                 st.session_state.selected_service = service
-
     st.markdown("</div>", unsafe_allow_html=True)
 
     # Display sub-categories if a service is selected
     if st.session_state.selected_service:
         sub_category_options = service_df[service_df["Service Line"] == st.session_state.selected_service]["Sub-Category"].unique().tolist()
         selected_sub_categories = st.multiselect("Select Specializations:", sub_category_options)
+    else:
+        selected_sub_categories = []
 
 # Company Selection
 st.subheader("Corporate Domain Selector")
@@ -140,19 +140,36 @@ if company_df is not None:
     selected_rows = grid_response.get("selected_rows", [])
     if isinstance(selected_rows, list) and all(isinstance(row, dict) for row in selected_rows):
         selected_tickers = [row.get("ticker", "") for row in selected_rows]
+        selected_company_names = [row.get("company name", "") for row in selected_rows]
     else:
         selected_tickers = []
+        selected_company_names = []
     
     # Additional Inquiry
     st.subheader("What else would you like to know?")
     user_question = st.text_area("Additional considerations")
     
-    # Submit button - make it red
-    if st.button("Submit", key="submit_button", 
-                 type="primary",  # This will make it use the primary button style
-                 help="Submit your inquiry", 
-                 use_container_width=True):
-        st.success("Your inquiry has been submitted successfully!")
+    # Submit button with POST request to n8n webhook
+    if st.button("Submit", key="submit_button", type="primary", help="Submit your inquiry", use_container_width=True):
+        # Build the payload with the required variables
+        payload = {
+            "service_options": st.session_state.selected_service,
+            "sub_category_options": selected_sub_categories,
+            "sector": sector,
+            "industry": industry,
+            "sub_industry": sub_industry,
+            "company_name": selected_company_names,
+            "ticker": selected_tickers,
+            "user_question": user_question
+        }
+        try:
+            response = requests.post(webhook_url, json=payload)
+            if response.status_code == 200:
+                st.success("Your inquiry has been submitted successfully!")
+            else:
+                st.error(f"Failed to submit inquiry. Status code: {response.status_code}")
+        except Exception as e:
+            st.error(f"Error submitting inquiry: {e}")
     
     # Download report button
     if selected_tickers and os.path.exists("report.docx"):
