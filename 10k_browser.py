@@ -99,21 +99,33 @@ if company_df is not None:
     with col1:
         sector = st.selectbox("Sector Class", ["All"] + sorted(company_df["sector"].dropna().unique().tolist()))
     with col2:
-        industry_options = company_df[company_df["sector"] == sector]["industry"].dropna().unique().tolist() if sector != "All" else company_df["industry"].dropna().unique().tolist()
-        industry = st.selectbox("Industry", ["All"] + sorted(industry_options))
+        if sector != "All":
+            industry_options = sorted(company_df[company_df["sector"] == sector]["industry"].dropna().unique().tolist())
+        else:
+            industry_options = sorted(company_df["industry"].dropna().unique().tolist())
+        industry = st.selectbox("Industry", ["All"] + industry_options)
     with col3:
-        sub_industry_options = company_df[(company_df["industry"] == industry) & (company_df["sector"] == sector)]["sub-industry"].dropna().unique().tolist() if industry != "All" else company_df["sub-industry"].dropna().unique().tolist()
-        sub_industry = st.selectbox("Business Vertical", ["All"] + sorted(sub_industry_options))
+        if sector != "All" and industry != "All":
+            sub_industry_options = sorted(company_df[(company_df["sector"] == sector) & (company_df["industry"] == industry)]["sub-industry"].dropna().unique().tolist())
+        else:
+            sub_industry_options = sorted(company_df["sub-industry"].dropna().unique().tolist())
+        sub_industry = st.selectbox("Business Vertical", ["All"] + sub_industry_options)
     
     search_query = st.text_input("Enter Company Name or Ticker:")
     
+    # Apply filters dynamically
+    filtered_df = company_df.copy()
+    if sector != "All":
+        filtered_df = filtered_df[filtered_df["sector"] == sector]
+    if industry != "All":
+        filtered_df = filtered_df[filtered_df["industry"] == industry]
+    if sub_industry != "All":
+        filtered_df = filtered_df[filtered_df["sub-industry"] == sub_industry]
     if search_query:
-        filtered_df = company_df[
-            company_df["company name"].str.contains(search_query, case=False, na=False) |
-            company_df["ticker"].str.contains(search_query, case=False, na=False)
+        filtered_df = filtered_df[
+            filtered_df["company name"].str.contains(search_query, case=False, na=False) |
+            filtered_df["ticker"].str.contains(search_query, case=False, na=False)
         ]
-    else:
-        filtered_df = company_df.copy()
     
     st.write("Tick the companies you want to analyze")
     gb = GridOptionsBuilder.from_dataframe(filtered_df[["ticker", "company name", "description"]])
